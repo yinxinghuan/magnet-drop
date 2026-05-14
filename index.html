@@ -1,0 +1,1196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="icon" type="image/gif" href="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" />
+<title>Magnet Drop</title>
+<style>
+  :root { --bg: #060512; --accent: #ff3ec9; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: var(--bg);
+    color: #fff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+    overflow: hidden; user-select: none; touch-action: none;
+    overscroll-behavior: none;
+  }
+  body { border-radius: 24px; overflow: hidden; position: relative; }
+  #stage { position: absolute; inset: 0; display: block; width: 100%; height: 100%; background: var(--bg); }
+
+  .flash {
+    position: absolute; inset: 0; z-index: 60;
+    background: #fff; opacity: 0; pointer-events: none;
+    transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    mix-blend-mode: screen;
+  }
+  .flash.on { opacity: 0.5; transition: opacity 0.05s ease-out; }
+
+  .hud {
+    position: absolute; left: 0; right: 0; top: 0;
+    text-align: center; pointer-events: none;
+    padding-top: env(safe-area-inset-top);
+    z-index: 5;
+  }
+  .hud .label {
+    margin-top: 22px; font-size: 18px; letter-spacing: 0.32em;
+    color: var(--accent); text-transform: uppercase;
+    text-shadow: 0 0 12px rgba(255, 62, 201, 0.55);
+    transition: color 0.4s ease, text-shadow 0.4s ease;
+  }
+  .hud .counter {
+    margin-top: 2px; font-size: 64px; font-weight: 700; line-height: 1;
+    color: #fff; letter-spacing: 0.02em;
+    text-shadow: 0 0 18px rgba(255,255,255,0.55), 0 0 38px rgba(255, 62, 201, 0.4);
+    font-variant-numeric: tabular-nums;
+    transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s ease;
+  }
+  .hud .counter.pop { transform: scale(1.18); }
+  .hud .counter.released { color: rgba(255,255,255,0.55); }
+  .hud .best {
+    margin-top: 14px; font-size: 12px; letter-spacing: 0.28em;
+    color: rgba(255,255,255,0.45); text-transform: uppercase;
+  }
+  .hud .best b { color: rgba(255,255,255,0.75); font-weight: 700; }
+  .hud .hint {
+    margin-top: 22px; font-size: 13px; letter-spacing: 0.24em;
+    color: rgba(255,255,255,0.45); text-transform: uppercase;
+    animation: md-pulse 2.4s ease-in-out infinite;
+  }
+  .hud .hint.hidden { opacity: 0; animation: none; transition: opacity 0.5s ease; }
+  @keyframes md-pulse {
+    0%, 100% { opacity: 0.55; }
+    50%      { opacity: 1; }
+  }
+
+  .theme-dots {
+    position: absolute; right: 14px; top: 14px;
+    display: flex; gap: 8px; padding: 8px;
+    pointer-events: auto; z-index: 10;
+    padding-top: calc(8px + env(safe-area-inset-top));
+  }
+  .theme-dots .dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    cursor: pointer; opacity: 0.5;
+    transition: transform 0.18s ease, opacity 0.18s ease;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .theme-dots .dot.active { opacity: 1; transform: scale(1.18); }
+  .theme-dots .dot[data-t="prism"]  { background: #ff3ec9; color: #ff3ec9; }
+  .theme-dots .dot[data-t="sunset"] { background: #ff8800; color: #ff8800; }
+  .theme-dots .dot[data-t="ocean"]  { background: #4cc3ff; color: #4cc3ff; }
+
+  .credits {
+    position: absolute; left: 0; right: 0; bottom: 16px;
+    text-align: center; color: rgba(255,255,255,0.18);
+    font-size: 11px; letter-spacing: 0.32em; text-transform: uppercase;
+    pointer-events: none; padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* === Leaderboard === */
+  .gg-lb-toggle {
+    position: absolute; left: 14px; top: 14px;
+    padding: 8px; padding-top: calc(8px + env(safe-area-inset-top));
+    pointer-events: auto; z-index: 10;
+  }
+  .gg-lb-toggle button {
+    width: 30px; height: 30px;
+    background: rgba(0,0,0,0.42);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 50%; color: #fff;
+    font-size: 15px; line-height: 1;
+    cursor: pointer; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.15s ease;
+  }
+  .gg-lb-toggle button:active { transform: scale(0.92); }
+
+  .gg-lb-backdrop {
+    position: absolute; inset: 0; z-index: 200;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.72);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  }
+  .gg-lb-backdrop.show { display: flex; }
+  .gg-lb-panel {
+    width: min(92%, 400px); max-height: 80vh;
+    display: flex; flex-direction: column; gap: 12px;
+    background: rgba(10,8,28,0.96);
+    border: 1px solid rgba(255, 62, 201, 0.12);
+    border-radius: 20px; padding: 18px 14px 14px;
+    box-shadow: 0 16px 40px rgba(0,0,0,0.6), 0 0 28px rgba(255, 62, 201, 0.08);
+    color: #fff; font-family: inherit;
+  }
+  .gg-lb-head { display: flex; align-items: center; gap: 10px; }
+  .gg-lb-head__icon { font-size: 24px; }
+  .gg-lb-head__title { font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: rgba(255,255,255,0.55); }
+  .gg-lb-head__game { font-size: 14px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; margin-top: 2px; }
+  .gg-lb-close {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: rgba(255,255,255,0.08); border: none; color: #fff;
+    font-size: 13px; cursor: pointer; font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .gg-lb-tabs { display: flex; gap: 6px; background: rgba(255,255,255,0.04); border-radius: 10px; padding: 4px; }
+  .gg-lb-tab {
+    flex: 1; padding: 8px 10px; border-radius: 8px; border: none;
+    background: transparent; color: rgba(255,255,255,0.6);
+    font-family: inherit; font-size: 12px; letter-spacing: 0.04em; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .gg-lb-tab.active { background: rgba(255, 62, 201, 0.16); color: #fff; }
+  .gg-lb-body { flex: 1; overflow-y: auto; min-height: 200px; -webkit-overflow-scrolling: touch; }
+  .gg-lb-state { padding: 48px 12px; text-align: center; color: rgba(255,255,255,0.45); font-size: 13px; }
+  .gg-lb-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px; border-radius: 12px; margin-bottom: 4px;
+    border: 1px solid transparent;
+  }
+  .gg-lb-row.top { background: rgba(255,255,255,0.04); }
+  .gg-lb-row.me  { background: rgba(255, 62, 201, 0.14); border-color: rgba(255, 62, 201, 0.4); }
+  .gg-lb-row.clickable { cursor: pointer; }
+  .gg-lb-rank { width: 26px; text-align: center; font-weight: 700; font-size: 14px; color: rgba(255,255,255,0.45); }
+  .gg-lb-rank.medal { font-size: 20px; }
+  .gg-lb-av {
+    background: rgba(255,255,255,0.08); border-radius: 50%; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; color: rgba(255,255,255,0.6); flex-shrink: 0;
+  }
+  .gg-lb-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .gg-lb-info { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+  .gg-lb-name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px; }
+  .gg-lb-mebadge { font-size: 10px; padding: 2px 6px; border-radius: 6px; background: rgba(255, 62, 201, 0.22); color: var(--accent); }
+  .gg-lb-score { font-weight: 700; font-size: 16px; color: #fff; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <div class="flash" id="flash"></div>
+
+  <div class="hud">
+    <div class="label" id="label">Chain</div>
+    <div class="counter" id="counter">0</div>
+    <div class="best">Best · <b id="best">0</b></div>
+    <div class="hint" id="hint">Drag through same color</div>
+  </div>
+
+  <div class="theme-dots" id="themeDots">
+    <div class="dot active" data-t="prism"></div>
+    <div class="dot" data-t="sunset"></div>
+    <div class="dot" data-t="ocean"></div>
+  </div>
+
+  <div class="gg-lb-toggle">
+    <button type="button" id="lbToggleBtn" aria-label="Leaderboard">🏆</button>
+  </div>
+
+  <div class="credits">Magnet Drop · Same color chains</div>
+
+<script>
+// ====== Leaderboard module — sets window.GG_LB ======
+(function () {
+  'use strict';
+  const GAMES_API = 'https://games-api.xinghuan-yin.workers.dev';
+  const GAME_ID   = 'magnet-drop';
+  const GAME_NAME = 'MAGNET DROP';
+
+  const params     = new URLSearchParams(window.location.search);
+  const telegramId = params.get('telegram_id') || null;
+  const rawOrigin  = params.get('api_origin');
+  const apiOrigin  = rawOrigin ? decodeURIComponent(rawOrigin) : null;
+  const isInAigram = !!(telegramId && apiOrigin);
+
+  let currentUser = null;
+  const toBase64   = s => btoa(unescape(encodeURIComponent(s)));
+  const fromBase64 = s => decodeURIComponent(escape(atob(s)));
+
+  function callAigramAPI(url) {
+    return new Promise((resolve, reject) => {
+      const id = (crypto.randomUUID && crypto.randomUUID()) || (Date.now() + '-' + Math.random());
+      const target = new URL(apiOrigin).origin;
+      let timer;
+      const handler = (e) => {
+        if (e.origin !== target) return;
+        const msg = typeof e.data === 'string' ? e.data : '';
+        if (!msg.startsWith('callAPIResult-')) return;
+        try {
+          const r = JSON.parse(fromBase64(msg.slice('callAPIResult-'.length)));
+          if (r.request_id !== id) return;
+          window.removeEventListener('message', handler);
+          clearTimeout(timer);
+          if (r.success) resolve(r.data); else reject(new Error(r.error || 'API error'));
+        } catch (_) {}
+      };
+      window.addEventListener('message', handler);
+      window.parent.postMessage(
+        `callAPI-${toBase64(JSON.stringify({ url, method: 'GET', data: null, request_id: id, emitter: window.location.origin }))}`,
+        target
+      );
+      timer = setTimeout(() => { window.removeEventListener('message', handler); reject(new Error('timeout')); }, 10000);
+    });
+  }
+
+  if (isInAigram) {
+    callAigramAPI(`/note/telegram/user/get/info/by/telegram_id?telegram_id=${telegramId}`)
+      .then(res => { currentUser = (res && res.data) ? res.data : res; })
+      .catch(() => {});
+  }
+
+  async function submitScore(score) {
+    if (!telegramId || !(score > 0)) return;
+    try {
+      await fetch(`${GAMES_API}/score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          game_id: GAME_ID,
+          telegram_id: telegramId,
+          name: (currentUser && currentUser.name) || telegramId,
+          avatar_url: (currentUser && currentUser.head_url) || '',
+          score: Math.floor(score),
+        }),
+      });
+    } catch (_) {}
+  }
+
+  async function fetchGlobal() {
+    try {
+      const res = await fetch(`${GAMES_API}/leaderboard?game_id=${GAME_ID}&limit=50`);
+      const json = await res.json();
+      return (json.leaderboard || []).map(e => Object.assign({}, e, { isMe: String(e.telegram_id) === String(telegramId) }));
+    } catch (_) { return []; }
+  }
+
+  async function fetchFriends() {
+    if (!isInAigram) return [];
+    const ids = new Set([String(telegramId)]);
+    try {
+      const contacts = await callAigramAPI(`/note/telegram/user/contact/list?telegram_id=${telegramId}`);
+      const list = Array.isArray(contacts) ? contacts : (contacts && contacts.data) || [];
+      list.forEach(f => { if (f && f.telegram_id) ids.add(String(f.telegram_id)); });
+    } catch (_) {}
+    try {
+      const res = await fetch(`${GAMES_API}/leaderboard?game_id=${GAME_ID}&telegram_ids=${encodeURIComponent([...ids].join(','))}`);
+      const json = await res.json();
+      return (json.leaderboard || []).map(e => Object.assign({}, e, { isMe: String(e.telegram_id) === String(telegramId) }));
+    } catch (_) { return []; }
+  }
+
+  function openProfile(tid) {
+    if (!apiOrigin) return;
+    try {
+      const enc = btoa(JSON.stringify({ id: tid }));
+      window.parent.postMessage(`AW.PROFILE.OPEN-${enc}`, new URL(apiOrigin).origin);
+    } catch (_) {}
+  }
+
+  const zh = (navigator.language || '').toLowerCase().startsWith('zh');
+  const S = zh
+    ? { title:'排行榜', global:'🌍 全局榜', friends:'👥 好友榜', me:'我',
+        empty:'暂无记录,快来第一个上榜!', emptyFriends:'好友还未上榜,快来邀请他们!', loading:'加载中…' }
+    : { title:'Leaderboard', global:'🌍 Global', friends:'👥 Friends', me:'me',
+        empty:'No records yet. Be the first!', emptyFriends:'No friends on the board yet.', loading:'Loading…' };
+  const MEDALS = ['🥇','🥈','🥉'];
+  const MEDAL_COLORS = ['#FFD700','#C0C0C0','#CD7F32'];
+
+  let root, body;
+  const tabs = {};
+  let currentTab = 'global';
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function build() {
+    if (root) return;
+    root = document.createElement('div');
+    root.className = 'gg-lb-backdrop';
+    root.addEventListener('pointerdown', e => { if (e.target === root) hide(); });
+
+    const panel = document.createElement('div');
+    panel.className = 'gg-lb-panel';
+    root.appendChild(panel);
+
+    const head = document.createElement('div');
+    head.className = 'gg-lb-head';
+    head.innerHTML =
+      '<span class="gg-lb-head__icon">🏆</span>' +
+      '<div style="flex:1; min-width:0">' +
+        `<div class="gg-lb-head__title">${esc(S.title)}</div>` +
+        `<div class="gg-lb-head__game">${esc(GAME_NAME)}</div>` +
+      '</div>' +
+      '<button type="button" class="gg-lb-close">✕</button>';
+    panel.appendChild(head);
+    head.querySelector('.gg-lb-close').addEventListener('pointerdown', hide);
+
+    if (isInAigram) {
+      const tabRow = document.createElement('div');
+      tabRow.className = 'gg-lb-tabs';
+      ['global','friends'].forEach(key => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'gg-lb-tab' + (key === 'global' ? ' active' : '');
+        b.textContent = key === 'global' ? S.global : S.friends;
+        b.addEventListener('pointerdown', () => {
+          if (currentTab !== key) { currentTab = key; updateTabs(); refresh(); }
+        });
+        tabRow.appendChild(b);
+        tabs[key] = b;
+      });
+      panel.appendChild(tabRow);
+    }
+
+    body = document.createElement('div');
+    body.className = 'gg-lb-body';
+    panel.appendChild(body);
+
+    document.body.appendChild(root);
+  }
+
+  function updateTabs() {
+    Object.keys(tabs).forEach(k => tabs[k].classList.toggle('active', k === currentTab));
+  }
+
+  function render(entries) {
+    if (!body) return;
+    body.innerHTML = '';
+    if (!entries.length) {
+      const empty = document.createElement('div');
+      empty.className = 'gg-lb-state';
+      empty.textContent = currentTab === 'friends' ? S.emptyFriends : S.empty;
+      body.appendChild(empty);
+      return;
+    }
+    entries.forEach((e, i) => {
+      const row = document.createElement('div');
+      const top = i < 3;
+      row.className = 'gg-lb-row' + (top ? ' top' : '') + (e.isMe ? ' me' : '') + (isInAigram ? ' clickable' : '');
+      if (isInAigram) row.addEventListener('pointerdown', () => openProfile(e.telegram_id));
+
+      const rank = document.createElement('div');
+      if (top) { rank.className = 'gg-lb-rank medal'; rank.textContent = MEDALS[i]; rank.style.color = MEDAL_COLORS[i]; }
+      else     { rank.className = 'gg-lb-rank'; rank.textContent = String(i + 1); }
+      row.appendChild(rank);
+
+      const sz = top ? 40 : 34;
+      const av = document.createElement('div');
+      av.className = 'gg-lb-av';
+      av.style.width = sz + 'px'; av.style.height = sz + 'px';
+      av.style.fontSize = Math.round(sz * 0.4) + 'px';
+      if (e.avatar_url) {
+        const img = document.createElement('img');
+        img.src = e.avatar_url; img.alt = e.name || ''; img.draggable = false;
+        img.onerror = () => { av.innerHTML = ''; av.textContent = (e.name || '?').charAt(0).toUpperCase(); };
+        av.appendChild(img);
+      } else {
+        av.textContent = (e.name || '?').charAt(0).toUpperCase();
+      }
+      row.appendChild(av);
+
+      const info = document.createElement('div');
+      info.className = 'gg-lb-info';
+      info.innerHTML =
+        `<span class="gg-lb-name">${esc(e.name || '')}</span>` +
+        (e.isMe ? `<span class="gg-lb-mebadge">${esc(S.me)}</span>` : '');
+      row.appendChild(info);
+
+      const sc = document.createElement('span');
+      sc.className = 'gg-lb-score';
+      sc.textContent = Number(e.score || 0).toLocaleString('en-US');
+      row.appendChild(sc);
+
+      body.appendChild(row);
+    });
+  }
+
+  async function refresh() {
+    body.innerHTML = `<div class="gg-lb-state">${esc(S.loading)}</div>`;
+    const data = currentTab === 'friends' ? await fetchFriends() : await fetchGlobal();
+    render(data);
+  }
+
+  function show() {
+    build();
+    currentTab = 'global';
+    updateTabs();
+    root.classList.add('show');
+    refresh();
+  }
+  function hide() { if (root) root.classList.remove('show'); }
+
+  const tbtn = document.getElementById('lbToggleBtn');
+  if (tbtn) tbtn.addEventListener('pointerdown', show);
+
+  window.GG_LB = { isInAigram, submitScore, show, hide };
+})();
+</script>
+
+<script>
+(() => {
+  'use strict';
+
+  // ----- Themes ---------------------------------------------------------------
+  // Each theme provides a background + 4 *highly* distinguishable particle hues.
+  // Same-color chaining is the entire mechanic, so the palette must be readable
+  // at a glance even on small phones. Within each theme the colors share a
+  // family but are well-spread on the hue + lightness wheels.
+  const THEMES = {
+    prism: {
+      bg: '#060512', accent: '#ff3ec9', root: 261.63,
+      palette: ['#ff3ec9', '#3ecaff', '#a3ff3e', '#ffd23e'],   // pink · cyan · lime · gold
+    },
+    sunset: {
+      bg: '#170306', accent: '#ff8800', root: 220.00,
+      palette: ['#ff2424', '#ff8800', '#ffd400', '#ff8ab8'],   // red · orange · yellow · rose
+    },
+    ocean: {
+      bg: '#020a18', accent: '#4cc3ff', root: 196.00,
+      palette: ['#a8f0ff', '#4cc3ff', '#5870ff', '#b048ff'],   // ice · sky · deep · violet
+    },
+  };
+
+  // ----- DOM + Canvas --------------------------------------------------------
+  const canvas    = document.getElementById('stage');
+  const ctx       = canvas.getContext('2d');
+  const counterEl = document.getElementById('counter');
+  const labelEl   = document.getElementById('label');
+  const bestEl    = document.getElementById('best');
+  const hintEl    = document.getElementById('hint');
+  const dotsEl    = document.getElementById('themeDots');
+  const flashEl   = document.getElementById('flash');
+
+  let W = 0, H = 0, DPR = 1, baseScale = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width  = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    baseScale = Math.min(W, H) / 414;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ----- Tuning -------------------------------------------------------------
+  const PARTICLE_COUNT = 70;
+  const PARTICLE_R     = 9;            // px, scaled by baseScale at render
+  const MAGNET_R       = 200;          // influence radius (px, scaled)
+  const ABSORB_R       = 28;           // distance for instant absorb
+  const PULL_FORCE     = 1100;         // peak px/s² at the magnet centre
+  const MAX_SPEED      = 1500;
+  const DRIFT_JITTER   = 6;            // px/s² random ambient drift
+  const FRICTION       = 0.92;         // per-frame velocity decay
+  const RESPAWN_MS     = 700;          // ms before an absorbed particle reappears
+  const HUD_RESERVE_PX = 220;          // particles avoid spawning inside HUD
+
+  // Chain milestones — visual escalation at key counts.
+  const MILESTONES = [5, 10, 20, 35, 50];
+
+  // ----- State --------------------------------------------------------------
+  let themeName = 'prism';
+  let theme = THEMES[themeName];
+
+  const state = {
+    particles: [],
+    magnet: null,                // { x, y } or null while finger up
+    chain: 0,
+    chainColor: -1,              // colour index of current chain, -1 = none
+    best: parseInt(localStorage.getItem('magnetdrop.best') || '0', 10) || 0,
+    sparks: [],
+    floats: [],                  // floating "+N" text on absorb
+    interacted: false,
+    edgePulse: 0,                // 0..1, brightens at high chains
+  };
+  bestEl.textContent = state.best;
+
+  function paletteSize() { return theme.palette.length; }
+
+  function randomColorIdx() { return Math.floor(Math.random() * paletteSize()); }
+
+  function makeParticle(forceColorIdx) {
+    // Spawn anywhere except the HUD strip at top
+    const x = 20 + Math.random() * (W - 40);
+    const y = HUD_RESERVE_PX + 20 + Math.random() * (H - HUD_RESERVE_PX - 60);
+    return {
+      x, y,
+      vx: (Math.random() - 0.5) * 16,
+      vy: (Math.random() - 0.5) * 16,
+      colorIdx: forceColorIdx != null ? forceColorIdx : randomColorIdx(),
+      r: PARTICLE_R * baseScale,
+      alpha: 0,                   // fade in
+    };
+  }
+
+  function initParticles() {
+    state.particles = [];
+    for (let i = 0; i < PARTICLE_COUNT; i++) state.particles.push(makeParticle());
+  }
+  initParticles();
+
+  // Dev hook (?dev=1) — exposes state for testing
+  if (new URLSearchParams(location.search).get('dev') === '1') {
+    window.__MD = { state, makeParticle, initParticles };
+  }
+
+  // ----- Input --------------------------------------------------------------
+  function setMagnet(x, y) {
+    if (!state.magnet) state.magnet = { x, y };
+    else { state.magnet.x = x; state.magnet.y = y; }
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (!state.interacted) {
+      state.interacted = true;
+      audio.unlock();
+      hintEl.classList.add('hidden');
+    }
+    setMagnet(e.clientX, e.clientY);
+    counterEl.classList.remove('released');
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!state.magnet) return;
+    setMagnet(e.clientX, e.clientY);
+  });
+
+  function endDrag() {
+    if (!state.magnet) return;
+    state.magnet = null;
+    endChain('release');
+  }
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+
+  dotsEl.addEventListener('pointerdown', (e) => {
+    const t = e.target.closest('.dot');
+    if (!t) return;
+    const name = t.dataset.t;
+    if (!THEMES[name] || name === themeName) return;
+    themeName = name;
+    theme = THEMES[name];
+    document.body.style.background = theme.bg;
+    document.documentElement.style.setProperty('--bg', theme.bg);
+    document.documentElement.style.setProperty('--accent', theme.accent);
+    [...dotsEl.children].forEach(d => d.classList.toggle('active', d.dataset.t === name));
+    audio.onThemeChange();
+  });
+
+  // ----- Game logic ---------------------------------------------------------
+  function absorb(p) {
+    let chainBroke = false;
+    if (state.chainColor === -1) {
+      state.chain = 1;
+      state.chainColor = p.colorIdx;
+    } else if (state.chainColor === p.colorIdx) {
+      state.chain += 1;
+    } else {
+      // Wrong colour breaks the chain. The new particle starts a fresh one.
+      bookChain('miscolor');
+      chainBroke = true;
+      state.chain = 1;
+      state.chainColor = p.colorIdx;
+    }
+
+    counterEl.textContent = state.chain.toLocaleString('en-US');
+    counterEl.classList.add('pop');
+    setTimeout(() => counterEl.classList.remove('pop'), 130);
+
+    // Audio + haptic per absorb
+    audio.absorb(state.chain);
+    if (navigator.vibrate) navigator.vibrate(state.chain >= 10 ? 12 : 5);
+
+    // Sparks at the absorb spot, in the absorbed colour
+    const color = theme.palette[p.colorIdx];
+    const sparkCount = Math.min(14, 6 + Math.floor(state.chain * 0.15));
+    for (let k = 0; k < sparkCount; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 100 + Math.random() * 220;
+      state.sparks.push({
+        x: p.x, y: p.y,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.4 + Math.random() * 0.3,
+        maxLife: 0.7,
+        color,
+      });
+    }
+
+    // Floating chain count near the absorb (only every few steps so it's not visual spam)
+    if (state.chain === 1 || state.chain % 5 === 0) {
+      state.floats.push({
+        x: p.x, y: p.y - 14 * baseScale,
+        text: '×' + state.chain,
+        life: 0.9,
+        maxLife: 0.9,
+        color,
+      });
+    }
+
+    // Milestone fanfare
+    if (MILESTONES.includes(state.chain)) {
+      flashEl.classList.add('on');
+      setTimeout(() => flashEl.classList.remove('on'), 70);
+      audio.milestone(state.chain);
+      state.edgePulse = Math.min(1, state.edgePulse + 0.55);
+    }
+
+    return chainBroke;
+  }
+
+  // End the current chain and book the result. Reason is just for sound choice.
+  function endChain(reason) {
+    if (state.chain <= 0) return;
+    const ended = state.chain;
+    if (ended >= 5) audio.bigBreak(ended);
+    else if (ended >= 2) audio.softBreak();
+
+    if (ended > state.best) {
+      state.best = ended;
+      localStorage.setItem('magnetdrop.best', String(state.best));
+      bestEl.textContent = state.best;
+    }
+    if (window.GG_LB) window.GG_LB.submitScore(ended);
+
+    state.chain = 0;
+    state.chainColor = -1;
+    counterEl.textContent = '0';
+    if (reason === 'release') counterEl.classList.add('released');
+  }
+  function bookChain(reason) { endChain(reason); }
+
+  function queueRespawn(colorHintIdx) {
+    setTimeout(() => {
+      let idx = randomColorIdx();
+      if (colorHintIdx != null && Math.random() < 0.25) idx = colorHintIdx;
+      // Pick a spawn point. Avoid landing right under the player's finger —
+      // otherwise a brand-new particle gets vacuumed up instantly which looks
+      // like the game cheated. A handful of retries is plenty.
+      const p = makeParticle(idx);
+      const safeR = (MAGNET_R * 0.8) * baseScale;
+      for (let tries = 0; tries < 6; tries++) {
+        if (!state.magnet) break;
+        const dx = p.x - state.magnet.x, dy = p.y - state.magnet.y;
+        if (Math.sqrt(dx * dx + dy * dy) >= safeR) break;
+        const fresh = makeParticle(idx);
+        p.x = fresh.x; p.y = fresh.y;
+      }
+      state.particles.push(p);
+    }, RESPAWN_MS + Math.random() * 400);
+  }
+
+  // ----- Update -------------------------------------------------------------
+  function update(dt) {
+    // Particles
+    for (let i = state.particles.length - 1; i >= 0; i--) {
+      const p = state.particles[i];
+      if (p.alpha < 1) p.alpha = Math.min(1, p.alpha + dt * 1.6);
+
+      // Magnet behaviour. The magnet is "tuned" to whatever colour you're
+      // currently chaining: only same-colour particles feel the pull, so a
+      // distant cyan can't suddenly fly into your pink streak and break it.
+      // When there's no active chain (chainColor === -1) anything attracts;
+      // the first absorb sets the tune. Wrong-colour particles still absorb
+      // on *direct contact* — that's the deliberate way to switch colour.
+      if (state.magnet) {
+        const dx = state.magnet.x - p.x;
+        const dy = state.magnet.y - p.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const R = MAGNET_R * baseScale;
+        const sameColor = state.chainColor === -1 || state.chainColor === p.colorIdx;
+        if (dist <= ABSORB_R * baseScale && dist > 0.1) {
+          // Direct contact absorb — works regardless of colour
+          state.particles.splice(i, 1);
+          const colorIdx = p.colorIdx;
+          absorb(p);
+          queueRespawn(colorIdx);
+          continue;
+        } else if (dist < R && sameColor) {
+          // Inverse-distance gravity well, falling off to zero at R
+          const t = 1 - dist / R;
+          const force = PULL_FORCE * t * t * dt * baseScale;
+          p.vx += (dx / dist) * force;
+          p.vy += (dy / dist) * force;
+        }
+      }
+
+      // Ambient jitter so particles don't go totally still
+      if (!state.magnet || Math.random() < 0.4) {
+        p.vx += (Math.random() - 0.5) * DRIFT_JITTER;
+        p.vy += (Math.random() - 0.5) * DRIFT_JITTER;
+      }
+
+      // Clamp speed
+      const sp = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+      const maxS = MAX_SPEED * baseScale;
+      if (sp > maxS) { p.vx = (p.vx / sp) * maxS; p.vy = (p.vy / sp) * maxS; }
+
+      // Integrate
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+
+      // Friction
+      const decay = Math.pow(FRICTION, dt * 60);
+      p.vx *= decay; p.vy *= decay;
+
+      // Bounce off edges (margins; respect HUD reserve at top)
+      const margin = p.r + 4;
+      const topMargin = HUD_RESERVE_PX + margin;
+      if (p.x < margin)        { p.x = margin;     p.vx = Math.abs(p.vx) * 0.7; }
+      if (p.x > W - margin)    { p.x = W - margin; p.vx = -Math.abs(p.vx) * 0.7; }
+      if (p.y < topMargin)     { p.y = topMargin;  p.vy = Math.abs(p.vy) * 0.7; }
+      if (p.y > H - margin)    { p.y = H - margin; p.vy = -Math.abs(p.vy) * 0.7; }
+    }
+
+    // Sparks
+    for (let i = state.sparks.length - 1; i >= 0; i--) {
+      const s = state.sparks[i];
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.life -= dt;
+      s.vx *= Math.pow(0.94, dt * 60);
+      s.vy *= Math.pow(0.94, dt * 60);
+      if (s.life <= 0) state.sparks.splice(i, 1);
+    }
+
+    // Floating numbers
+    for (let i = state.floats.length - 1; i >= 0; i--) {
+      const f = state.floats[i];
+      f.y -= 36 * dt;
+      f.life -= dt;
+      if (f.life <= 0) state.floats.splice(i, 1);
+    }
+
+    // Edge pulse decay (cosmetic — see drawEdgePulse)
+    state.edgePulse = Math.max(0, state.edgePulse - dt * 0.7);
+  }
+
+  // ----- Render -------------------------------------------------------------
+  function fillBackground() {
+    ctx.fillStyle = theme.bg;
+    ctx.fillRect(0, 0, W, H);
+    // Vignette
+    if (state.magnet) {
+      const m = state.magnet;
+      const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, Math.max(W, H) * 0.8);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,0.5)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    } else {
+      const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.8);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,0.55)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  function drawParticles() {
+    for (const p of state.particles) {
+      const color = theme.palette[p.colorIdx];
+      const isChainColor = state.chainColor === p.colorIdx;
+      ctx.globalAlpha = p.alpha;
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = (isChainColor ? 22 : 12) * baseScale;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+      // Inner highlight
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.beginPath();
+      ctx.arc(p.x - p.r * 0.3, p.y - p.r * 0.3, p.r * 0.32, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+
+  function drawMagnet() {
+    if (!state.magnet) return;
+    const m = state.magnet;
+    const R = MAGNET_R * baseScale;
+    const aR = ABSORB_R * baseScale;
+    const t = performance.now() / 1000;
+
+    // Outer influence ring — shows where the pull reaches. Tinted to the
+    // active chain colour so the player can see that the magnet is "tuned"
+    // to a specific colour right now and won't suck in other colours.
+    ctx.save();
+    const tunedColor = state.chain > 0 ? theme.palette[state.chainColor] : '#ffffff';
+    ctx.strokeStyle = hexAlpha(tunedColor, 0.22);
+    ctx.setLineDash([6 * baseScale, 8 * baseScale]);
+    ctx.lineDashOffset = -t * 30;
+    ctx.lineWidth = 1.8 * baseScale;
+    ctx.shadowColor = tunedColor;
+    ctx.shadowBlur = state.chain > 0 ? 16 * baseScale : 0;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, R, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Vortex glow
+    const baseColor = state.chain > 0 ? theme.palette[state.chainColor] : '#ffffff';
+    ctx.save();
+    const grad = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, aR * 2.4);
+    grad.addColorStop(0,   'rgba(255,255,255,0.65)');
+    grad.addColorStop(0.4, hexAlpha(baseColor, 0.35));
+    grad.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, aR * 2.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Core
+    ctx.save();
+    ctx.fillStyle = baseColor;
+    ctx.shadowColor = baseColor;
+    ctx.shadowBlur = (16 + Math.sin(t * 6) * 4) * baseScale;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, (12 + Math.sin(t * 4) * 1.4) * baseScale, 0, Math.PI * 2);
+    ctx.fill();
+    // White hot centre
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, 4 * baseScale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawSparks() {
+    for (const s of state.sparks) {
+      const a = Math.max(0, s.life / s.maxLife);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = s.color;
+      ctx.shadowColor = s.color;
+      ctx.shadowBlur = 8 * baseScale;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 2.4 * baseScale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+
+  function drawFloats() {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = `700 ${20 * baseScale}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+    for (const f of state.floats) {
+      const a = Math.max(0, f.life / f.maxLife);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = f.color;
+      ctx.shadowColor = f.color;
+      ctx.shadowBlur = 10 * baseScale;
+      ctx.fillText(f.text, f.x, f.y);
+    }
+    ctx.restore();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+
+  function drawEdgePulse() {
+    if (state.edgePulse <= 0.02) return;
+    const p = state.edgePulse;
+    ctx.save();
+    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45,
+                                       W / 2, H / 2, Math.max(W, H) * 0.7);
+    const hue = hexToHue(theme.accent);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, `hsla(${hue}, 95%, 65%, ${p * 0.42})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  // ----- Tiny colour helpers ------------------------------------------------
+  function hexAlpha(hex, a) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.substr(0, 2), 16);
+    const g = parseInt(h.substr(2, 2), 16);
+    const b = parseInt(h.substr(4, 2), 16);
+    return `rgba(${r}, ${g}, ${b}, ${a})`;
+  }
+  function hexToHue(hex) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.substr(0, 2), 16) / 255;
+    const g = parseInt(h.substr(2, 2), 16) / 255;
+    const b = parseInt(h.substr(4, 2), 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    if (max === min) return 0;
+    let hh = 0;
+    const d = max - min;
+    if (max === r) hh = ((g - b) / d) % 6;
+    else if (max === g) hh = (b - r) / d + 2;
+    else hh = (r - g) / d + 4;
+    return ((hh * 60) % 360 + 360) % 360;
+  }
+
+  // ----- Audio --------------------------------------------------------------
+  // Same breathing pad family as Atomic. Event sounds:
+  //   absorb(n)   — pentatonic blip, pitch climbs with chain count
+  //   softBreak() — short "fizz" for short chain
+  //   bigBreak(n) — glass shatter scaled by chain
+  //   milestone(n) — extra harmonic chord layer at threshold counts
+  const audio = (() => {
+    let ac = null;
+    let masterGain, padBus, fxGain, delayNode, delayFb, delayWet;
+    let padHandle = null;
+    let breathTimer = null;
+    let twinkleTimer = null;
+    let unlocked = false;
+    let lastAbsorbT = 0;
+
+    const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28];
+
+    function ensure() {
+      if (ac) return ac;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ac = new AC();
+      masterGain = ac.createGain(); masterGain.gain.value = 0.85; masterGain.connect(ac.destination);
+      delayNode = ac.createDelay(1.2);
+      delayNode.delayTime.value = 0.34;
+      delayFb   = ac.createGain(); delayFb.gain.value = 0.36;
+      delayWet  = ac.createGain(); delayWet.gain.value = 0.30;
+      delayNode.connect(delayFb); delayFb.connect(delayNode);
+      delayNode.connect(delayWet); delayWet.connect(masterGain);
+      padBus = ac.createGain(); padBus.gain.value = 0.6; padBus.connect(masterGain);
+      fxGain = ac.createGain(); fxGain.gain.value = 1;   fxGain.connect(masterGain);
+      return ac;
+    }
+    function unlock() {
+      if (unlocked) return;
+      if (!ensure()) return;
+      if (ac.state !== 'running') ac.resume();
+      unlocked = true;
+      setTimeout(scheduleBreathCycle, 900);
+      scheduleTwinkle();
+    }
+
+    function buildPad() {
+      const t = ac.currentTime;
+      const out = ac.createGain(); out.gain.value = 0;
+      const filt = ac.createBiquadFilter();
+      filt.type = 'lowpass'; filt.frequency.value = 700; filt.Q.value = 0.7;
+      filt.connect(out);
+      const intervals = [1, 2, 3];
+      const oscs = intervals.map((mult, i) => {
+        const o = ac.createOscillator(); o.type = 'sine';
+        o.frequency.value = theme.root * 0.5 * mult * (1 + (Math.random() - 0.5) * 0.005);
+        const g = ac.createGain();
+        g.gain.value = (1 / intervals.length) * (1 - i * 0.2);
+        o.connect(g); g.connect(filt); o.start(t);
+        return { o, g };
+      });
+      const lfo = ac.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.05;
+      const lfoGain = ac.createGain(); lfoGain.gain.value = 220;
+      lfo.connect(lfoGain); lfoGain.connect(filt.frequency); lfo.start(t);
+      out.connect(padBus);
+      return { out, filt, oscs, lfo, lfoGain };
+    }
+    function destroyPad(handle, fadeMs = 800) {
+      if (!handle) return;
+      const t = ac.currentTime;
+      handle.out.gain.cancelScheduledValues(t);
+      handle.out.gain.setValueAtTime(handle.out.gain.value, t);
+      handle.out.gain.linearRampToValueAtTime(0, t + fadeMs / 1000);
+      const stopAt = t + fadeMs / 1000 + 0.05;
+      handle.oscs.forEach(({ o }) => { try { o.stop(stopAt); } catch(_){} });
+      try { handle.lfo.stop(stopAt); } catch(_){}
+      setTimeout(() => {
+        try {
+          handle.oscs.forEach(({ o, g }) => { o.disconnect(); g.disconnect(); });
+          handle.lfo.disconnect(); handle.lfoGain.disconnect();
+          handle.filt.disconnect(); handle.out.disconnect();
+        } catch (_) {}
+      }, fadeMs + 200);
+    }
+    function scheduleBreathCycle() {
+      if (!ac || !unlocked) return;
+      const rise    = 5 + Math.random() * 3;
+      const hold    = 8 + Math.random() * 8;
+      const fall    = 6 + Math.random() * 4;
+      const silence = 7 + Math.random() * 9;
+      const peak    = 0.05 + Math.random() * 0.03;
+
+      padHandle = buildPad();
+      const h = padHandle;
+      const t = ac.currentTime;
+      h.out.gain.setValueAtTime(0, t);
+      h.out.gain.linearRampToValueAtTime(peak, t + rise);
+      h.out.gain.linearRampToValueAtTime(peak * 0.82, t + rise + hold * 0.5);
+      h.out.gain.linearRampToValueAtTime(peak,        t + rise + hold);
+      h.out.gain.linearRampToValueAtTime(0, t + rise + hold + fall);
+      const teardownIn = (rise + hold + fall) * 1000 + 200;
+      setTimeout(() => { destroyPad(h, 50); padHandle = null; }, teardownIn);
+      breathTimer = setTimeout(scheduleBreathCycle, teardownIn + silence * 1000);
+    }
+    function scheduleTwinkle() {
+      if (!ac || !unlocked) return;
+      const delaySec = 5 + Math.random() * 11;
+      twinkleTimer = setTimeout(() => {
+        twinkle();
+        scheduleTwinkle();
+      }, delaySec * 1000);
+    }
+    function twinkle() {
+      if (!ac || !unlocked) return;
+      const t = ac.currentTime;
+      const step = PENTA[Math.floor(Math.random() * 6)];
+      const freq = theme.root * 4 * Math.pow(2, step / 12);
+      const o = ac.createOscillator(); o.type = 'sine'; o.frequency.value = freq;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.05, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+      o.connect(g); g.connect(padBus); g.connect(delayNode);
+      o.start(t); o.stop(t + 0.85);
+    }
+
+    function onThemeChange() {
+      if (!ac || !unlocked) return;
+      if (padHandle) { destroyPad(padHandle, 1200); padHandle = null; }
+    }
+
+    function absorb(chain) {
+      if (!unlocked) return;
+      const now = performance.now();
+      if (now - lastAbsorbT < 14) return;   // rate-limit when sweeping fast
+      lastAbsorbT = now;
+      const t = ac.currentTime;
+      const idx = Math.min(chain - 1, PENTA.length - 1);
+      const step = PENTA[idx];
+      const freq = theme.root * Math.pow(2, step / 12);
+      // Tone
+      const o = ac.createOscillator(); o.type = 'triangle';
+      o.frequency.value = freq;
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 5200;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.10, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.30);
+      o.connect(lp); lp.connect(g); g.connect(fxGain);
+      if (chain >= 4) g.connect(delayNode);
+      o.start(t); o.stop(t + 0.36);
+      // Click body for tactility
+      const len = Math.floor(ac.sampleRate * 0.03);
+      const buf = ac.createBuffer(1, len, ac.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) {
+        const env = Math.pow(1 - i / len, 2.4);
+        data[i] = (Math.random() - 0.5) * env;
+      }
+      const ns = ac.createBufferSource(); ns.buffer = buf;
+      const bp = ac.createBiquadFilter(); bp.type = 'bandpass';
+      bp.frequency.value = 2200; bp.Q.value = 1.2;
+      const ng = ac.createGain(); ng.gain.value = 0.10;
+      ns.connect(bp); bp.connect(ng); ng.connect(fxGain);
+      ns.start(t);
+    }
+
+    function softBreak() {
+      if (!unlocked) return;
+      const t = ac.currentTime;
+      const o = ac.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(220, t);
+      o.frequency.exponentialRampToValueAtTime(80, t + 0.18);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.06, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+      o.connect(lp); lp.connect(g); g.connect(fxGain);
+      o.start(t); o.stop(t + 0.26);
+    }
+
+    function bigBreak(chain) {
+      if (!unlocked) return;
+      const t = ac.currentTime;
+      const intensity = Math.min(2.4, 0.6 + chain * 0.05);
+      // Sub thump
+      const sub = ac.createOscillator(); sub.type = 'sine';
+      sub.frequency.setValueAtTime(160, t);
+      sub.frequency.exponentialRampToValueAtTime(38, t + 0.5);
+      const subG = ac.createGain();
+      subG.gain.setValueAtTime(0, t);
+      subG.gain.linearRampToValueAtTime(0.26 * intensity, t + 0.01);
+      subG.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+      sub.connect(subG); subG.connect(fxGain);
+      sub.start(t); sub.stop(t + 0.8);
+      // Glass shards
+      const shards = 4 + Math.floor(intensity * 4);
+      for (let i = 0; i < shards; i++) {
+        const delay = Math.random() * 0.12;
+        const baseF = 2400 + Math.random() * 4400;
+        const o = ac.createOscillator();
+        o.type = i % 2 === 0 ? 'sine' : 'triangle';
+        o.frequency.setValueAtTime(baseF, t + delay);
+        o.frequency.exponentialRampToValueAtTime(baseF * 0.45, t + delay + 0.18);
+        const g = ac.createGain();
+        const peak = (0.05 + Math.random() * 0.04) * intensity;
+        g.gain.setValueAtTime(0, t + delay);
+        g.gain.linearRampToValueAtTime(peak, t + delay + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.22);
+        o.connect(g); g.connect(fxGain);
+        if (i < 3) g.connect(delayNode);
+        o.start(t + delay); o.stop(t + delay + 0.26);
+      }
+    }
+
+    function milestone(chain) {
+      if (!unlocked) return;
+      const t = ac.currentTime;
+      [1, 1.4983, 2].forEach((mult, i) => {
+        const o = ac.createOscillator(); o.type = 'triangle';
+        o.frequency.value = theme.root * 2 * mult;
+        const g = ac.createGain();
+        const peak = 0.10 - i * 0.02;
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(peak, t + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+        o.connect(g); g.connect(fxGain); g.connect(delayNode);
+        o.start(t); o.stop(t + 0.55);
+      });
+    }
+
+    return { unlock, absorb, softBreak, bigBreak, milestone, onThemeChange };
+  })();
+
+  // ----- Loop ---------------------------------------------------------------
+  let lastT = performance.now();
+  let running = true;
+  function tick(now) {
+    if (!running) { lastT = now; requestAnimationFrame(tick); return; }
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+    update(dt);
+    fillBackground();
+    drawEdgePulse();
+    drawParticles();
+    drawMagnet();
+    drawSparks();
+    drawFloats();
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame((t) => { lastT = t; tick(t); });
+
+  document.addEventListener('visibilitychange', () => {
+    running = document.visibilityState === 'visible';
+    lastT = performance.now();
+  });
+})();
+</script>
+</body>
+</html>
