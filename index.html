@@ -237,6 +237,52 @@
     } catch (_) {}
   }
 
+  // ── Leaderboard-beat 1:1 notify (score_beat) — see aigram-notify skill ──
+  let preRunBest = 0;
+  const notifiedTargets = new Set();
+  if (A.canRank && telegramId) {
+    callAigramAPI('/note/aigram/ai/game/rank/score/list/by/session_id?session_id=' + gameUuid, 'GET')
+      .then(res => {
+        const rows = Array.isArray(res) ? res : (res && res.data) || [];
+        const meId = String(telegramId);
+        const me = rows.find(r => String(r.user_id) === meId);
+        preRunBest = me ? Number(me.score) || 0 : 0;
+      }).catch(() => {});
+  }
+  async function notifyBeat(myScore) {
+    if (!A.canRank || !telegramId) return;
+    if (myScore <= preRunBest) return;
+    try {
+      const res = await callAigramAPI(
+        '/note/aigram/ai/game/rank/score/list/by/session_id?session_id=' + gameUuid, 'GET');
+      const rows = Array.isArray(res) ? res : (res && res.data) || [];
+      const meId = String(telegramId);
+      const beaten = rows
+        .filter(r => String(r.user_id) !== meId)
+        .map(r => ({ id: String(r.user_id), score: Number(r.score) || 0 }))
+        .filter(r => r.score < myScore && r.score > preRunBest && !notifiedTargets.has(r.id))
+        .sort((a, b) => b.score - a.score)[0];
+      if (!beaten) return;
+      notifiedTargets.add(beaten.id);
+      A.postAigramAPI('/note/aigram/ai/game/record/play', {
+        session_id: gameUuid,
+        event: 'score_beat',
+        config_json: { actions: [{
+          type: 'notify',
+          target_user_id: beaten.id,
+          image: {
+            ref_url: 'https://yinxinghuan.github.io/games/posters/magnet-drop.png',
+            prompt: 'Tiny iron filings cascading and snapping into a glowing magnetic chain against a dark gradient.',
+          },
+          message: {
+            template: '{sender_name} just out-snapped you — ' + Math.round(myScore) + ' on Magnet Drop.',
+            variables: ['sender_name'],
+          },
+        }] },
+      });
+    } catch (_) {}
+  }
+
   async function fetchGlobal() {
     if (!A.canRank) return [];
     try {
@@ -394,7 +440,7 @@
   const tbtn = document.getElementById('lbToggleBtn');
   if (tbtn) tbtn.addEventListener('pointerdown', show);
 
-  window.GG_LB = { isInAigram, submitScore, show, hide };
+  window.GG_LB = { isInAigram, submitScore, notifyBeat, show, hide };
 })();
 </script>
 
@@ -638,7 +684,7 @@
       localStorage.setItem('magnetdrop.best', String(state.best));
       bestEl.textContent = state.best;
     }
-    if (window.GG_LB) window.GG_LB.submitScore(ended);
+    if (window.GG_LB) { window.GG_LB.submitScore(ended); window.GG_LB.notifyBeat && window.GG_LB.notifyBeat(ended); }
 
     state.chain = 0;
     state.chainColor = -1;
