@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+    <script src="./alteru-storage-scope.js" data-alteru-storage-scope data-game-storage-id="414afe34-82fe-41a6-8b16-17c175ede45a"></script>
     <meta name="game-uuid" content="414afe34-82fe-41a6-8b16-17c175ede45a" />
 
 <meta charset="UTF-8" />
@@ -555,7 +556,7 @@
     magnet: null,                // { x, y } or null while finger up
     chain: 0,
     chainColor: -1,              // colour index of current chain, -1 = none
-    best: parseInt(localStorage.getItem('magnetdrop.best') || '0', 10) || 0,
+    best: parseInt(alteruLocalStorage.getItem('magnetdrop.best') || '0', 10) || 0,
     sparks: [],
     floats: [],                  // floating "+N" text on absorb
     interacted: false,
@@ -710,7 +711,7 @@
 
     if (ended > state.best) {
       state.best = ended;
-      localStorage.setItem('magnetdrop.best', String(state.best));
+      alteruLocalStorage.setItem('magnetdrop.best', String(state.best));
       bestEl.textContent = state.best;
     }
     if (window.GG_LB) { window.GG_LB.submitScore(ended); window.GG_LB.notifyBeat && window.GG_LB.notifyBeat(ended); }
